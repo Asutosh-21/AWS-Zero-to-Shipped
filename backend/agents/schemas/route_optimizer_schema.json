@@ -1,0 +1,132 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "RouteOptimizer Agent API",
+    "version": "1.0.0",
+    "description": "Plans optimal public transit routes to food sources for car-free families"
+  },
+  "paths": {
+    "/calculate_route": {
+      "post": {
+        "operationId": "calculate_route",
+        "summary": "Calculate route between two locations",
+        "description": "Uses Amazon Location Service to calculate walking or transit route with distance, time, and fare estimate",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["origin", "destination"],
+                "properties": {
+                  "origin":         { "type": "string", "description": "Starting address or zip code" },
+                  "destination":    { "type": "string", "description": "Destination address" },
+                  "transport_mode": { "type": "string", "description": "Walking or Car", "default": "Walking" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Route details with distance, duration, and fare",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "distanceMiles":   { "type": "number",  "description": "Distance in miles" },
+                    "durationMinutes": { "type": "number",  "description": "Travel time in minutes" },
+                    "estimatedFare":   { "type": "number",  "description": "Bus fare in USD" },
+                    "tip":             { "type": "string",  "description": "Routing recommendation" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/multi_stop_optimize": {
+      "post": {
+        "operationId": "multi_stop_optimize",
+        "summary": "Optimize a multi-stop route to multiple food sources",
+        "description": "Uses nearest-neighbor algorithm to find the most efficient order to visit multiple food sources",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["origin", "stops"],
+                "properties": {
+                  "origin":         { "type": "string", "description": "User's starting address or zip code" },
+                  "stops":          { "type": "string", "description": "JSON array of stop objects with name and address" },
+                  "transport_mode": { "type": "string", "description": "Walking or Car", "default": "Walking" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Optimized multi-stop route",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "optimizedStops":       { "type": "array"  },
+                    "routeLegs":            { "type": "array"  },
+                    "totalDurationMinutes": { "type": "number" },
+                    "totalDistanceMiles":   { "type": "number" },
+                    "totalFare":            { "type": "number" },
+                    "summary":              { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/estimate_travel_time": {
+      "post": {
+        "operationId": "estimate_travel_time",
+        "summary": "Estimate travel time and recommend transport mode",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["origin", "destination"],
+                "properties": {
+                  "origin":      { "type": "string", "description": "Starting address" },
+                  "destination": { "type": "string", "description": "Destination address" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Travel time estimates and mode recommendation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "walkingMinutes":   { "type": "number" },
+                    "recommendedMode":  { "type": "string" },
+                    "totalWithTransit": { "type": "number" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

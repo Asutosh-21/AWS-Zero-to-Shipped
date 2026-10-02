@@ -1,0 +1,125 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "FoodFinder Agent API",
+    "version": "1.0.0",
+    "description": "Finds real-time food sources near a zip code"
+  },
+  "paths": {
+    "/search_food_sources": {
+      "post": {
+        "operationId": "search_food_sources",
+        "summary": "Search for food sources near a zip code",
+        "description": "Returns food banks, pantries, community fridges, and SNAP-accepting stores near the given zip code with real-time stock status",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["zip_code"],
+                "properties": {
+                  "zip_code":      { "type": "string",  "description": "5-digit US zip code" },
+                  "source_types":  { "type": "string",  "description": "Comma-separated: foodBank,pantry,fridge,store,market or 'all'", "default": "all" },
+                  "snap_required": { "type": "string",  "description": "true if user needs SNAP-accepting sources only", "default": "false" },
+                  "radius_miles":  { "type": "integer", "description": "Search radius in miles", "default": 5 }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "List of food sources sorted by trust score then distance",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sources":    { "type": "array",   "description": "Array of food source objects" },
+                    "totalFound": { "type": "integer", "description": "Total matching sources" },
+                    "zipCode":    { "type": "string",  "description": "Queried zip code" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/check_stock": {
+      "post": {
+        "operationId": "check_stock",
+        "summary": "Check real-time stock level for a food source",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["source_id"],
+                "properties": {
+                  "source_id": { "type": "string", "description": "Unique food source ID" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Stock level and available items",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "stockLevel":  { "type": "string",  "description": "high | medium | low | empty" },
+                    "items":       { "type": "array",   "description": "Available food categories" },
+                    "lastUpdated": { "type": "string",  "description": "ISO timestamp of last update" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/verify_snap_acceptance": {
+      "post": {
+        "operationId": "verify_snap_acceptance",
+        "summary": "Verify if a food source accepts SNAP/EBT",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["source_id"],
+                "properties": {
+                  "source_id": { "type": "string", "description": "Unique food source ID" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "SNAP/WIC/EBT acceptance status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "snapAccepted": { "type": "boolean" },
+                    "wicAccepted":  { "type": "boolean" },
+                    "ebtAccepted":  { "type": "boolean" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

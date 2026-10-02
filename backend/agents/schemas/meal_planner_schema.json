@@ -1,0 +1,132 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "MealPlanner Agent API",
+    "version": "1.0.0",
+    "description": "Generates SNAP-optimized meal plans grounded in USDA nutrition data"
+  },
+  "paths": {
+    "/generate_meal_plan": {
+      "post": {
+        "operationId": "generate_meal_plan",
+        "summary": "Generate a 7-day SNAP-optimized meal plan",
+        "description": "Creates a complete meal plan within the user's SNAP budget, respecting dietary restrictions, with nutrition scores and shopping list",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["snap_balance", "family_size"],
+                "properties": {
+                  "snap_balance":          { "type": "number",  "description": "Monthly SNAP balance in USD" },
+                  "family_size":           { "type": "integer", "description": "Number of people in the family" },
+                  "dietary_restrictions":  { "type": "string",  "description": "Comma-separated: lactose-free, gluten-free, vegan, vegetarian, halal, or 'none'", "default": "none" },
+                  "available_foods":       { "type": "string",  "description": "JSON array of foods already available at home", "default": "[]" },
+                  "days":                  { "type": "integer", "description": "Number of days to plan for", "default": 7 }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Complete meal plan with cost breakdown and nutrition score",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "mealPlan":           { "type": "array",   "description": "Day-by-day meal plan" },
+                    "totalCost":          { "type": "number",  "description": "Total cost for the plan period" },
+                    "estimatedSavings":   { "type": "number",  "description": "Savings vs average SNAP waste ($47)" },
+                    "costPerMeal":        { "type": "number",  "description": "Cost per meal per person" },
+                    "nutritionScore":     { "type": "integer", "description": "Nutrition score 0-100" },
+                    "shoppingList":       { "type": "array",   "description": "Consolidated shopping list" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/optimize_snap_budget": {
+      "post": {
+        "operationId": "optimize_snap_budget",
+        "summary": "Calculate optimal SNAP budget breakdown",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["snap_balance", "family_size"],
+                "properties": {
+                  "snap_balance": { "type": "number",  "description": "Monthly SNAP balance in USD" },
+                  "family_size":  { "type": "integer", "description": "Number of people" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Budget breakdown and optimization tips",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "dailyBudget":         { "type": "number" },
+                    "costPerPersonPerDay": { "type": "number" },
+                    "costPerMeal":         { "type": "number" },
+                    "averageAmericanWaste":{ "type": "number" },
+                    "tips":                { "type": "array"  }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/dietary_filter": {
+      "post": {
+        "operationId": "dietary_filter",
+        "summary": "Filter meals by dietary restrictions",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["meals", "restrictions"],
+                "properties": {
+                  "meals":        { "type": "string", "description": "JSON array of meal objects" },
+                  "restrictions": { "type": "string", "description": "Comma-separated dietary restrictions" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Filtered meals matching all restrictions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "filteredMeals": { "type": "array"   },
+                    "count":         { "type": "integer" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
