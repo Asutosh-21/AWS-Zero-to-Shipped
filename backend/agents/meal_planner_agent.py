@@ -4,10 +4,12 @@ import os
 from datetime import datetime, timezone
 
 bedrock_agent_runtime = boto3.client("bedrock-agent-runtime", region_name="us-east-1")
-dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
+bedrock_runtime       = boto3.client("bedrock-runtime",       region_name="us-east-1")
+dynamodb              = boto3.resource("dynamodb",             region_name="us-east-1")
 
-TABLE_USERS = dynamodb.Table(os.environ["DYNAMODB_TABLE_USERS"])
-KB_ID = os.environ["BEDROCK_KB_ID"]
+TABLE_USERS   = dynamodb.Table(os.environ["DYNAMODB_TABLE_USERS"])
+KB_ID         = os.environ.get("BEDROCK_KB_ID", "")
+NOVA_MODEL_ID = "amazon.nova-lite-v1:0"
 
 AGENT_INSTRUCTIONS = """
 You are the NutriRoute MealPlanner Agent. You create practical, nutritious, budget-optimized
@@ -73,13 +75,13 @@ def generate_meal_plan(snap_balance, family_size, dietary_restrictions, availabl
     weekly_budget = daily_budget * days
     cost_per_meal = weekly_budget / (days * 3)
 
-    kb_response = bedrock_agent_runtime.retrieve(
-        knowledgeBaseId=KB_ID,
-        retrievalQuery={"text": f"budget meal plan {dietary_restrictions} family {family_size} SNAP"},
-        retrievalConfiguration={"vectorSearchConfiguration": {"numberOfResults": 5}},
-    )
-
-    context_docs = [r["content"]["text"] for r in kb_response.get("retrievalResults", [])]
+    # Use KB if configured, otherwise use built-in templates
+    if KB_ID:
+        kb_response  = bedrock_agent_runtime.retrieve(
+            knowledgeBaseId      = KB_ID,
+            retrievalQuery       = {"text": f"budget meal plan {dietary_restrictions} family {family_size} SNAP"},
+            retrievalConfiguration = {"vectorSearchConfiguration": {"numberOfResults": 5}},
+        )
 
     meal_templates = _get_meal_templates(dietary_restrictions, cost_per_meal, available_foods)
 

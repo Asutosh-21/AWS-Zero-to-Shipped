@@ -9,9 +9,12 @@ translate = boto3.client("translate", region_name="us-east-1")
 bedrock_agent_runtime = boto3.client("bedrock-agent-runtime", region_name="us-east-1")
 s3 = boto3.client("s3", region_name="us-east-1")
 
-S3_BUCKET_UPLOADS = os.environ["S3_BUCKET_UPLOADS"]
-SUPERVISOR_AGENT_ID = os.environ["BEDROCK_AGENT_SUPERVISOR_ID"]
+S3_BUCKET_UPLOADS      = os.environ["S3_BUCKET_UPLOADS"]
+SUPERVISOR_AGENT_ID    = os.environ.get("BEDROCK_AGENT_SUPERVISOR_ID", "")
 SUPERVISOR_AGENT_ALIAS = os.environ.get("BEDROCK_AGENT_SUPERVISOR_ALIAS", "LIVE")
+NOVA_MODEL_ID          = "amazon.nova-lite-v1:0"
+
+bedrock_runtime = boto3.client("bedrock-runtime", region_name="us-east-1")
 
 LANGUAGE_VOICE_MAP = {
     "en": {"transcribe": "en-US", "polly": "Joanna", "polly_engine": "neural"},
@@ -51,17 +54,28 @@ def lambda_handler(event, context):
         )
         query_in_english = translate_response["TranslatedText"]
 
-    bedrock_response = bedrock_agent_runtime.invoke_agent(
-        agentId=SUPERVISOR_AGENT_ID,
-        agentAliasId=SUPERVISOR_AGENT_ALIAS,
-        sessionId=f"voice-{session_id}",
-        inputText=query_in_english,
-    )
-
-    response_text_english = ""
-    for event_stream in bedrock_response.get("completion", []):
-        if "chunk" in event_stream:
-            response_text_english += event_stream["chunk"].get("bytes", b"").decode("utf-8")
+    if SUPERVISOR_AGENT_ID:
+        bedrock_response = bedrock_agent_runtime.invoke_agent(
+            agentId=SUPERVISOR_AGENT_ID,
+            agentAliasId=SUPERVISOR_AGENT_ALIAS,
+            sessionId=f"voice-{session_id}",
+            inputText=query_in_english,
+        )
+        response_text_english = ""
+        for event_stream in bedrock_response.get("completion", []):
+            if "chunk" in event_stream:
+                response_text_english += event_stream["chunk"].get("bytes", b"").decode("utf-8")
+    else:
+        payload = {
+            "messages": [{"role": "user", "content": [{"text": query_in_english}]}],
+            "inferenceConfig": {"maxTokens": 1024, "temperature": 0.3},
+        }
+        resp = bedrock_runtime.invoke_model(
+            modelId=NOVA_MODEL_ID, body=json.dumps(payload),
+            contentType="application/json", accept="application/json",
+        )
+        result = json.loads(resp["body"].read())
+        response_text_english = result.get("output", {}).get("message", {}).get("content", [{}])[0].get("text", "")
 
     response_text = response_text_english
     if language_code != "en":

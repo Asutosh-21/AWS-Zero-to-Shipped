@@ -2,10 +2,12 @@ import json
 import boto3
 import os
 
-bedrock = boto3.client("bedrock-agent-runtime", region_name="us-east-1")
+bedrock        = boto3.client("bedrock-agent-runtime", region_name="us-east-1")
+bedrock_runtime = boto3.client("bedrock-runtime",       region_name="us-east-1")
 
-SUPERVISOR_AGENT_ID = os.environ["BEDROCK_AGENT_SUPERVISOR_ID"]
+SUPERVISOR_AGENT_ID    = os.environ.get("BEDROCK_AGENT_SUPERVISOR_ID", "")
 SUPERVISOR_AGENT_ALIAS = os.environ.get("BEDROCK_AGENT_SUPERVISOR_ALIAS", "LIVE")
+NOVA_MODEL_ID          = "amazon.nova-lite-v1:0"
 
 AGENT_INSTRUCTIONS = """
 You are the NutriRoute AI Supervisor. You orchestrate three specialist agents to help
@@ -35,27 +37,11 @@ def lambda_handler(event, context):
     if not user_query:
         return {"statusCode": 400, "body": json.dumps({"error": "query is required"})}
 
-    response = bedrock.invoke_agent(
-        agentId=SUPERVISOR_AGENT_ID,
-        agentAliasId=SUPERVISOR_AGENT_ALIAS,
-        sessionId=session_id,
-        inputText=user_query,
-        enableTrace=True,
-    )
-
-    full_response = ""
-    trace_steps = []
-
-    for event_stream in response.get("completion", []):
-        if "chunk" in event_stream:
-            chunk = event_stream["chunk"]
-            full_response += chunk.get("bytes", b"").decode("utf-8")
-        if "trace" in event_stream:
-            trace = event_stream["trace"].get("trace", {})
-            if "orchestrationTrace" in trace:
-                step = trace["orchestrationTrace"]
-                if "rationale" in step:
-                    trace_steps.append(step["rationale"].get("text", ""))
+    # Use Bedrock Agent if configured, otherwise fall back to Nova Lite direct
+    if SUPERVISOR_AGENT_ID:
+        full_response, trace_steps = _invoke_agent(user_query, session_id)
+    else:
+        full_response, trace_steps = _invoke_nova(user_query)
 
     return {
         "statusCode": 200,
@@ -64,5 +50,47 @@ def lambda_handler(event, context):
             "response": full_response,
             "sessionId": session_id,
             "agentSteps": trace_steps,
+            "model": "nova-lite" if not SUPERVISOR_AGENT_ID else "bedrock-agent",
         }),
     }
+
+
+def _invoke_agent(user_query, session_id):
+    response    = bedrock.invoke_agent(
+        agentId      = SUPERVISOR_AGENT_ID,
+        agentAliasId = SUPERVISOR_AGENT_ALIAS,
+        sessionId    = session_id,
+        inputText    = user_query,
+        enableTrace  = True,
+    )
+    full_response = ""
+    trace_steps   = []
+    for event_stream in response.get("completion", []):
+        if "chunk" in event_stream:
+            full_response += event_stream["chunk"].get("bytes", b"").decode("utf-8")
+        if "trace" in event_stream:
+            trace = event_stream["trace"].get("trace", {})
+            if "orchestrationTrace" in trace:
+                step = trace["orchestrationTrace"]
+                if "rationale" in step:
+                    trace_steps.append(step["rationale"].get("text", ""))
+    return full_response, trace_steps
+
+
+def _invoke_nova(user_query):
+    """Direct Nova Lite invocation — used before Bedrock Agents are configured."""
+    system_prompt = AGENT_INSTRUCTIONS
+    payload = {
+        "messages": [{"role": "user", "content": [{"text": user_query}]}],
+        "system": [{"text": system_prompt}],
+        "inferenceConfig": {"maxTokens": 2048, "temperature": 0.3},
+    }
+    response = bedrock_runtime.invoke_model(
+        modelId     = NOVA_MODEL_ID,
+        body        = json.dumps(payload),
+        contentType = "application/json",
+        accept      = "application/json",
+    )
+    result = json.loads(response["body"].read())
+    text   = result.get("output", {}).get("message", {}).get("content", [{}])[0].get("text", "")
+    return text, ["Nova Lite direct invocation"]

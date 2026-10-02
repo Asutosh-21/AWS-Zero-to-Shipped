@@ -8,9 +8,12 @@ rekognition = boto3.client("rekognition", region_name="us-east-1")
 bedrock_agent_runtime = boto3.client("bedrock-agent-runtime", region_name="us-east-1")
 s3 = boto3.client("s3", region_name="us-east-1")
 
-S3_BUCKET_UPLOADS = os.environ["S3_BUCKET_UPLOADS"]
-SUPERVISOR_AGENT_ID = os.environ["BEDROCK_AGENT_SUPERVISOR_ID"]
+S3_BUCKET_UPLOADS      = os.environ["S3_BUCKET_UPLOADS"]
+SUPERVISOR_AGENT_ID    = os.environ.get("BEDROCK_AGENT_SUPERVISOR_ID", "")
 SUPERVISOR_AGENT_ALIAS = os.environ.get("BEDROCK_AGENT_SUPERVISOR_ALIAS", "LIVE")
+NOVA_MODEL_ID          = "amazon.nova-lite-v1:0"
+
+bedrock_runtime = boto3.client("bedrock-runtime", region_name="us-east-1")
 
 FOOD_LABELS = {
     "Egg", "Rice", "Bread", "Milk", "Cheese", "Butter", "Yogurt",
@@ -74,17 +77,28 @@ def lambda_handler(event, context):
         f"Each meal must take under 30 minutes. Show nutrition score out of 100."
     )
 
-    bedrock_response = bedrock_agent_runtime.invoke_agent(
-        agentId=SUPERVISOR_AGENT_ID,
-        agentAliasId=SUPERVISOR_AGENT_ALIAS,
-        sessionId=f"foodlens-{session_id}",
-        inputText=meal_query,
-    )
-
-    meal_plan_text = ""
-    for event_stream in bedrock_response.get("completion", []):
-        if "chunk" in event_stream:
-            meal_plan_text += event_stream["chunk"].get("bytes", b"").decode("utf-8")
+    if SUPERVISOR_AGENT_ID:
+        bedrock_response = bedrock_agent_runtime.invoke_agent(
+            agentId=SUPERVISOR_AGENT_ID,
+            agentAliasId=SUPERVISOR_AGENT_ALIAS,
+            sessionId=f"foodlens-{session_id}",
+            inputText=meal_query,
+        )
+        meal_plan_text = ""
+        for event_stream in bedrock_response.get("completion", []):
+            if "chunk" in event_stream:
+                meal_plan_text += event_stream["chunk"].get("bytes", b"").decode("utf-8")
+    else:
+        payload = {
+            "messages": [{"role": "user", "content": [{"text": meal_query}]}],
+            "inferenceConfig": {"maxTokens": 1024, "temperature": 0.3},
+        }
+        resp = bedrock_runtime.invoke_model(
+            modelId=NOVA_MODEL_ID, body=json.dumps(payload),
+            contentType="application/json", accept="application/json",
+        )
+        result = json.loads(resp["body"].read())
+        meal_plan_text = result.get("output", {}).get("message", {}).get("content", [{}])[0].get("text", "")
 
     return {
         "statusCode": 200,

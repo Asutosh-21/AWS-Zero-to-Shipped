@@ -11,6 +11,7 @@ resource "aws_bedrockagent_knowledge_base" "main" {
       embedding_model_arn = "arn:aws:bedrock:us-east-1::foundation-model/amazon.titan-embed-text-v2:0"
     }
   }
+  # Agent model: amazon.nova-lite-v1:0 (no approval needed, instant access)
 
   storage_configuration {
     type = "OPENSEARCH_SERVERLESS"
